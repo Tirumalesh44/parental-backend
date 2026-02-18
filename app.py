@@ -1,3 +1,4 @@
+# app.py (or main.py) - This is your FastAPI application file
 from fastapi import FastAPI, File, UploadFile
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal
@@ -17,10 +18,10 @@ Base.metadata.create_all(bind=engine)
 # ==============================
 
 HF_TOKEN = os.getenv("HF_TOKEN")
-HF_API_URL = "https://api-inference.huggingface.co/models/Falconsai/nsfw_image_detection"
+HF_API_URL = "https://router.huggingface.co/models/Falconsai/nsfw_image_detection"  # Updated to new HF router endpoint
 
 SEXUAL_THRESHOLD = 0.60
-SESSION_GAP_SECONDS = 30
+SESSION_GAP_SECONDS = 30  # Not used in code, but kept as is
 
 headers = {
     "Authorization": f"Bearer {HF_TOKEN}"
