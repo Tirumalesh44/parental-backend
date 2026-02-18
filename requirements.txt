@@ -1,4 +1,4 @@
-# requirements.txt - Updated dependencies
+# requirements.txt - Updated with timm (required for the model)
 fastapi
 uvicorn
 sqlalchemy
@@ -8,3 +8,4 @@ Pillow
 gunicorn
 transformers
 torch
+timm  # Added this to fix the ImportError

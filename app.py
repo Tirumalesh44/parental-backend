@@ -1,4 +1,4 @@
-# app.py (or main.py) - Updated FastAPI application with local model inference
+# app.py (or main.py) - Unchanged from previous, but confirming for completeness
 from fastapi import FastAPI, File, UploadFile
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal
@@ -19,9 +19,8 @@ Base.metadata.create_all(bind=engine)
 # CONFIG
 # ==============================
 
-# No more HF_TOKEN or API_URL needed
 # Using Marqo/nsfw-image-detection-384 for lighter weight (~5.8M params, faster on CPU)
-MODEL_NAME = "Marqo/nsfw-image-detection-384"  # Switch to "Falconsai/nsfw_image_detection" if preferred, but Marqo is recommended for efficiency
+MODEL_NAME = "Marqo/nsfw-image-detection-384"  # Switch to "Falconsai/nsfw_image_detection" if preferred
 
 SEXUAL_THRESHOLD = 0.60
 SESSION_GAP_SECONDS = 30  # Not used in code, but kept as is
