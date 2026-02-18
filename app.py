@@ -12,77 +12,80 @@ app = FastAPI(title="Parental Control Backend")
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-# ENV VARIABLES
+# ==============================
+# CONFIG
+# ==============================
+
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_API_URL = "https://api-inference.huggingface.co/models/Falconsai/nsfw_image_detection"
 
 SEXUAL_THRESHOLD = 0.60
+SESSION_GAP_SECONDS = 30
 
+headers = {
+    "Authorization": f"Bearer {HF_TOKEN}"
+}
 
-# -----------------------------
-# SAFE HUGGINGFACE CALL
-# -----------------------------
-def analyze_with_hf(image_bytes):
+# ==============================
+# HUGGINGFACE INFERENCE
+# ==============================
 
-    if not HF_TOKEN:
-        return {"error": "HF_TOKEN not configured"}
+def analyze_with_hf(image_bytes: bytes):
 
-    headers = {
-        "Authorization": f"Bearer {HF_TOKEN}",
-        "Content-Type": "application/octet-stream"
-    }
+    response = requests.post(
+        HF_API_URL,
+        headers=headers,
+        data=image_bytes,
+        timeout=30
+    )
+
+    if response.status_code != 200:
+        return {
+            "error": f"HuggingFace Error {response.status_code}",
+            "raw": response.text
+        }
 
     try:
-        response = requests.post(
-            HF_API_URL,
-            headers=headers,
-            data=image_bytes,
-            timeout=60
-        )
+        return response.json()
+    except:
+        return {
+            "error": "Invalid JSON from HuggingFace",
+            "raw": response.text
+        }
 
-        print("HF STATUS:", response.status_code)
-        print("HF RESPONSE:", response.text)
-
-        if response.status_code != 200:
-            return {"error": response.text}
-
-        try:
-            return response.json()
-        except Exception:
-            return {"error": "Invalid JSON returned from HF"}
-
-    except Exception as e:
-        return {"error": str(e)}
-
-
-# -----------------------------
+# ==============================
 # ANALYZE FRAME
-# -----------------------------
+# ==============================
+
 @app.post("/analyze-frame")
 async def analyze_frame(file: UploadFile = File(...)):
 
-    image_bytes = await file.read()
+    contents = await file.read()
 
-    result = analyze_with_hf(image_bytes)
+    hf_result = analyze_with_hf(contents)
 
-    # If HF error → do NOT crash backend
-    if isinstance(result, dict) and "error" in result:
+    # If HF error → return safely
+    if isinstance(hf_result, dict) and "error" in hf_result:
         return {
             "categories": [],
             "sexual_score": 0.0,
             "timestamp": datetime.utcnow().isoformat(),
-            "hf_error": result["error"]
+            "hf_error": hf_result["error"]
         }
+
+    # HF returns list of predictions
+    # Example:
+    # [
+    #   {"label": "nsfw", "score": 0.98},
+    #   {"label": "sfw", "score": 0.02}
+    # ]
 
     sexual_score = 0.0
 
-    if isinstance(result, list):
-        for r in result:
-            label = r.get("label", "")
-            score = r.get("score", 0.0)
-
-            if label.lower() in ["porn", "sexy", "hentai"]:
-                sexual_score = max(sexual_score, score)
+    for item in hf_result:
+        if item["label"].lower() == "nsfw":
+            sexual_score = item["score"]
+            break
 
     categories = []
     if sexual_score >= SEXUAL_THRESHOLD:
@@ -90,15 +93,17 @@ async def analyze_frame(file: UploadFile = File(...)):
 
     now = datetime.utcnow().isoformat()
 
-    # Store only bad detections
+    # Store only if bad content
     if categories:
         db: Session = SessionLocal()
+
         detection = Detection(
             timestamp=now,
             sexual_score=sexual_score,
             violent_score=0.0,
             categories=json.dumps(categories)
         )
+
         db.add(detection)
         db.commit()
         db.close()
@@ -109,25 +114,27 @@ async def analyze_frame(file: UploadFile = File(...)):
         "timestamp": now
     }
 
-
-# -----------------------------
+# ==============================
 # PARENT SUMMARY
-# -----------------------------
+# ==============================
+
 @app.get("/parent-summary")
 def parent_summary():
 
     db: Session = SessionLocal()
-    total = db.query(Detection).count()
+
+    total_bad_frames = db.query(Detection).count()
+
     db.close()
 
     return {
-        "total_bad_frames": total
+        "total_bad_frames": total_bad_frames
     }
 
+# ==============================
+# HEALTH CHECK
+# ==============================
 
-# -----------------------------
-# HEALTH CHECK (IMPORTANT)
-# -----------------------------
 @app.get("/")
 def health():
-    return {"status": "Backend running"}
+    return {"status": "Backend Running"}
