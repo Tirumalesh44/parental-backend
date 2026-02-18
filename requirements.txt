@@ -1,16 +1,10 @@
-# fastapi
-# uvicorn
-# requests
-# sqlalchemy
-# psycopg2-binary
-# python-multipart
-# Pillow
-# requirements.txt - Dependencies for Render deployment
+# requirements.txt - Updated dependencies
 fastapi
 uvicorn
-requests
 sqlalchemy
 psycopg2-binary
 python-multipart
 Pillow
-gunicorn  # Add for production worker on Render
+gunicorn
+transformers
+torch

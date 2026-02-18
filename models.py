@@ -10,6 +10,7 @@
 #     violent_score = Column(Float)
 #     categories = Column(String)
 # models.py - SQLAlchemy model for Detection
+# models.py - Unchanged
 from sqlalchemy import Column, Integer, String, Float
 from database import Base
 import json

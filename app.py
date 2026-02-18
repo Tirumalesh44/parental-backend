@@ -1,12 +1,14 @@
-# app.py (or main.py) - This is your FastAPI application file
+# app.py (or main.py) - Updated FastAPI application with local model inference
 from fastapi import FastAPI, File, UploadFile
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal
 from models import Base, Detection
 from datetime import datetime
 import json
-import requests
 import os
+from PIL import Image
+import io
+from transformers import pipeline
 
 app = FastAPI(title="Parental Control Backend")
 
@@ -17,41 +19,27 @@ Base.metadata.create_all(bind=engine)
 # CONFIG
 # ==============================
 
-HF_TOKEN = os.getenv("HF_TOKEN")
-HF_API_URL = "https://router.huggingface.co/models/Falconsai/nsfw_image_detection"  # Updated to new HF router endpoint
+# No more HF_TOKEN or API_URL needed
+# Using Marqo/nsfw-image-detection-384 for lighter weight (~5.8M params, faster on CPU)
+MODEL_NAME = "Marqo/nsfw-image-detection-384"  # Switch to "Falconsai/nsfw_image_detection" if preferred, but Marqo is recommended for efficiency
 
 SEXUAL_THRESHOLD = 0.60
 SESSION_GAP_SECONDS = 30  # Not used in code, but kept as is
 
-headers = {
-    "Authorization": f"Bearer {HF_TOKEN}"
-}
+# Load model at startup (CPU only, since Render has no GPU)
+classifier = pipeline("image-classification", model=MODEL_NAME, device=-1)
+print(f"Loaded model: {MODEL_NAME}")  # For logs
 
 # ==============================
-# HUGGINGFACE INFERENCE
+# LOCAL INFERENCE
 # ==============================
 
-def analyze_with_hf(image_bytes: bytes):
-
-    response = requests.post(
-        HF_API_URL,
-        headers=headers,
-        data=image_bytes,
-        timeout=30
-    )
-
-    if response.status_code != 200:
-        return {
-            "error": f"HuggingFace Error {response.status_code}",
-            "raw": response.text
-        }
-
+def analyze_local(image: Image.Image):
     try:
-        return response.json()
-    except:
+        return classifier(image)
+    except Exception as e:
         return {
-            "error": "Invalid JSON from HuggingFace",
-            "raw": response.text
+            "error": f"Local Inference Error: {str(e)}"
         }
 
 # ==============================
@@ -62,10 +50,19 @@ def analyze_with_hf(image_bytes: bytes):
 async def analyze_frame(file: UploadFile = File(...)):
 
     contents = await file.read()
+    try:
+        image = Image.open(io.BytesIO(contents))
+    except Exception as e:
+        return {
+            "categories": [],
+            "sexual_score": 0.0,
+            "timestamp": datetime.utcnow().isoformat(),
+            "hf_error": f"Image Open Error: {str(e)}"  # Reuse field for error
+        }
 
-    hf_result = analyze_with_hf(contents)
+    hf_result = analyze_local(image)
 
-    # If HF error → return safely
+    # If error → return safely
     if isinstance(hf_result, dict) and "error" in hf_result:
         return {
             "categories": [],
@@ -74,8 +71,8 @@ async def analyze_frame(file: UploadFile = File(...)):
             "hf_error": hf_result["error"]
         }
 
-    # HF returns list of predictions
-    # Example:
+    # Results are list of predictions
+    # Example for Marqo/Falconsai:
     # [
     #   {"label": "nsfw", "score": 0.98},
     #   {"label": "sfw", "score": 0.02}
