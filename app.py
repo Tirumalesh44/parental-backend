@@ -4,39 +4,47 @@ from database import engine, SessionLocal
 from models import Base, Detection
 from datetime import datetime
 import json
-import io
-from PIL import Image
-from transformers import pipeline
-import torch
+import requests
+import os
 
 app = FastAPI(title="Parental Control Backend")
 
 Base.metadata.create_all(bind=engine)
 
-device = 0 if torch.cuda.is_available() else -1
-
-nsfw_classifier = pipeline(
-    "image-classification",
-    model="LukeJacob2023/nsfw-image-detector",
-    device=device
-)
+HF_TOKEN = os.getenv("HF_TOKEN")
+HF_API_URL = "https://api-inference.huggingface.co/models/LukeJacob2023/nsfw-image-detector"
 
 SEXUAL_THRESHOLD = 0.60
 SESSION_GAP_SECONDS = 30
 
 
+def analyze_with_hf(image_bytes):
+    headers = {
+        "Authorization": f"Bearer {HF_TOKEN}"
+    }
+
+    response = requests.post(
+        HF_API_URL,
+        headers=headers,
+        data=image_bytes
+    )
+
+    return response.json()
+
+
 @app.post("/analyze-frame")
 async def analyze_frame(file: UploadFile = File(...)):
 
-    contents = await file.read()
-    image = Image.open(io.BytesIO(contents)).convert("RGB")
+    image_bytes = await file.read()
 
-    result = nsfw_classifier(image)
+    result = analyze_with_hf(image_bytes)
 
-    sexual_score = max(
-        (r["score"] for r in result if r["label"] in ["porn", "sexy", "hentai"]),
-        default=0.0
-    )
+    sexual_score = 0.0
+
+    if isinstance(result, list):
+        for r in result:
+            if r["label"] in ["porn", "sexy", "hentai"]:
+                sexual_score = max(sexual_score, r["score"])
 
     categories = []
     if sexual_score >= SEXUAL_THRESHOLD:
