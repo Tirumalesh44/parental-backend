@@ -14,7 +14,7 @@ Base.metadata.create_all(bind=engine)
 
 # ENV VARIABLES
 HF_TOKEN = os.getenv("HF_TOKEN")
-HF_API_URL = "https://api-inference.huggingface.co/models/LukeJacob2023/nsfw-image-detector"
+HF_API_URL = "https://api-inference.huggingface.co/models/Falconsai/nsfw_image_detection"
 
 SEXUAL_THRESHOLD = 0.60
 
