@@ -1,11 +1,8 @@
-# requirements.txt - Updated with timm (required for the model)
 fastapi
 uvicorn
 sqlalchemy
 psycopg2-binary
 python-multipart
-Pillow
-gunicorn
-transformers
+pillow
 torch
-timm  # Added this to fix the ImportError
+transformers
